@@ -1,14 +1,27 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "type": "module", 
+  "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node -r dotenv/config server.js",
+    "dev": "nodemon -r dotenv/config server.js",
+    "build": "npm install --production",
+    "test:mysql": "node -r dotenv/config test-mysql-connection.js",
+    "azure:deploy": "az webapp up --sku F1 --name meteo-backend-app --resource-group rg-meteo-app --runtime \"NODE|22-lts\""
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "@azure/identity": "^4.13.0",
+    "@azure/keyvault-secrets": "^4.10.0",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.15.3",
     "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   }
 }

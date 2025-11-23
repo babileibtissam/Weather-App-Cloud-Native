@@ -32,7 +32,7 @@ body {
   padding: 30px;
   box-shadow: var(--shadow);
   width: 100%;
-  max-width: 700px; /* Much wider - increased from 500px to 700px */
+  max-width: 900px;
   text-align: center;
   transition: var(--transition);
 }
@@ -195,9 +195,10 @@ body {
 }
 
 .weather-details {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr; /* 4 columns for wider layout */
-  gap: 15px;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr 1fr !important;
+  gap: 20px !important;
+  justify-content: center !important;
   background: rgba(255, 255, 255, 0.15);
   padding: 25px;
   border-radius: 16px;
@@ -210,11 +211,14 @@ body {
   font-size: 1.1rem;
   font-weight: 600;
   display: flex;
-  flex-direction: column; /* Stack icon and text */
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px;
+  padding: 15px;
+  text-align: center;
+  flex: 1; /* ← Chaque élément prend la même largeur */
+  max-width: 120px; /* ← Largeur maximale pour chaque élément */
 }
 
 .detail-item span:last-child {

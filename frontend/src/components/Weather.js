@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { WiDaySunny, WiCloud, WiRain, WiSnow, WiStrongWind, WiHumidity, WiStrongWind as WiWind } from "react-icons/wi";
 import "./App.css";
 import FavouriteIcon from './FavouriteIcon';
-
+import { weatherService, favoritesService } from '../services/api';
 
 function Weather() {
   const [city, setCity] = useState("");
@@ -13,12 +14,36 @@ function Weather() {
   const [unit, setUnit] = useState("celsius");
   const [favouriteCities, setFavouriteCities] = useState([]);
   const [showFavourites, setShowFavourites] = useState(false);
+  const [isUpdatingFavourite, setIsUpdatingFavourite] = useState(false);
 
-  // Charger les villes favorites au démarrage
+  const { logout, user } = useAuth();
+  const navigate = useNavigate();
+
+  // Charger les villes favorites depuis la DB
   useEffect(() => {
-    const savedFavourites = JSON.parse(localStorage.getItem('favouriteCities') || '[]');
-    setFavouriteCities(savedFavourites);
-  }, []);
+    const loadFavoritesFromDB = async () => {
+      if (!user) {
+        console.log('No user logged in, skipping favorites load');
+        return;
+      }
+      
+      try {
+        console.log('Loading favorites for user:', user.id);
+        const response = await favoritesService.getFavorites();
+        console.log('Favorites loaded from DB:', response.data);
+        setFavouriteCities(response.data || []);
+      } catch (error) {
+        console.error('Error loading favorites from DB:', error);
+        // Only use localStorage as fallback for unauthenticated users
+        if (!user) {
+          const savedFavourites = JSON.parse(localStorage.getItem('favouriteCities') || '[]');
+          setFavouriteCities(savedFavourites);
+        }
+      }
+    };
+    
+    loadFavoritesFromDB();
+  }, [user]);
 
   const getWeather = async () => {
     if (!city.trim()) {
@@ -26,37 +51,43 @@ function Weather() {
       setWeather(null);
       return;
     }
-
+  
     setLoading(true);
     setError("");
-
+  
     try {
-      const response = await fetch(`http://localhost:5000/weather?q=${encodeURIComponent(city)}`);
-      const data = await response.json();
-
-      if (response.ok) {
-        setWeather(data);
-        setShowFavourites(false);
-      } else {
-        setError(data.error || "City not found");
-        setWeather(null);
+      const response = await weatherService.getPublicWeather(city);
+      console.log('Weather data received:', response.data);
+      
+      if (!response.data) {
+        throw new Error('No data received from server');
       }
-    } catch {
-      setError("Failed to fetch weather data. Make sure the server is running.");
+      
+      setWeather(response.data);
+      setShowFavourites(false);
+    } catch (error) {
+      console.error('Weather fetch error:', error);
+      setError(error.response?.data?.error || error.message || "City not found");
       setWeather(null);
     }
     setLoading(false);
   };
 
-  const getWeatherIcon = (main) => {
+  const getWeatherIcon = (description) => {
     const iconProps = { size: 80 };
     
-    switch (main) {
-      case "Clear": return <WiDaySunny {...iconProps} color="#FFD93D" />;
-      case "Clouds": return <WiCloud {...iconProps} color="#B0BEC5" />;
-      case "Rain": return <WiRain {...iconProps} color="#4FC3F7" />;
-      case "Snow": return <WiSnow {...iconProps} color="#90CAF9" />;
-      default: return <WiStrongWind {...iconProps} color="#4DB6AC" />;
+    const desc = description?.toLowerCase() || '';
+    
+    if (desc.includes('dégagé') || desc.includes('clair') || desc.includes('clear')) {
+      return <WiDaySunny {...iconProps} color="#FFD93D" />;
+    } else if (desc.includes('nuage') || desc.includes('cloud')) {
+      return <WiCloud {...iconProps} color="#B0BEC5" />;
+    } else if (desc.includes('pluie') || desc.includes('rain')) {
+      return <WiRain {...iconProps} color="#4FC3F7" />;
+    } else if (desc.includes('neige') || desc.includes('snow')) {
+      return <WiSnow {...iconProps} color="#90CAF9" />;
+    } else {
+      return <WiStrongWind {...iconProps} color="#4DB6AC" />;
     }
   };
 
@@ -71,36 +102,101 @@ function Weather() {
     setUnit(unit === "celsius" ? "fahrenheit" : "celsius");
   };
 
-  const handleFavouriteToggle = (isFavourite, cityData) => {
-    // Vérification de sécurité
-      if (!cityData || !cityData.name) {
-       console.error("Erreur: Données de ville manquantes", cityData);
-       return;
-  }
-    const savedFavourites = JSON.parse(localStorage.getItem('favouriteCities') || '[]');
-  setFavouriteCities(savedFavourites);
-  console.log(`${cityData.name} ${isFavourite ? 'ajoutée aux' : 'retirée des'} favoris`);
+  const handleFavouriteToggle = async (isFavourite, cityData) => {
+    if (!cityData || !cityData.name || !user) {
+      console.error("Erreur: Données de ville manquantes ou utilisateur non connecté", cityData, user);
+      return;
+    }
+    
+    if (isUpdatingFavourite) {
+      console.log('Favourite update already in progress');
+      return;
+    }
+    
+    setIsUpdatingFavourite(true);
+    
+    try {
+      if (isFavourite) {
+        console.log('Adding favorite to DB:', cityData);
+        // Send cityData directly without wrapping in {city: ...}
+        await favoritesService.addFavorite({
+          name: cityData.name,
+          country: cityData.country,
+          lat: cityData.lat,
+          lon: cityData.lon
+        });
+      } else {
+        console.log('Removing favorite from DB:', cityData.name);
+        await favoritesService.removeFavorite(cityData.name);
+      }
+      
+      // Wait a bit then reload favorites from DB
+      setTimeout(async () => {
+        try {
+          const response = await favoritesService.getFavorites();
+          console.log('Refreshed favorites after update:', response.data);
+          setFavouriteCities(response.data || []);
+        } catch (error) {
+          console.error('Error refreshing favorites:', error);
+        }
+        setIsUpdatingFavourite(false);
+      }, 500);
+      
+    } catch (error) {
+      console.error('Error updating favorites:', error);
+      setIsUpdatingFavourite(false);
+      
+      // Show detailed error to user
+      setError(`Failed to ${isFavourite ? 'add' : 'remove'} favorite: ${error.response?.data?.message || error.message}`);
+    }
   };
 
   const loadFavouriteCity = (favCity) => {
-    setCity(favCity.name);
+    const cityName = favCity.name || favCity.city_name;
+    console.log('Loading favorite city:', cityName);
+    setCity(cityName);
     setShowFavourites(false);
+    
+    // Use setTimeout to ensure state updates before API call
     setTimeout(() => {
       getWeather();
     }, 100);
   };
 
-  const removeFavourite = (cityName, e) => {
+  const removeFavourite = async (cityName, e) => {
     e.stopPropagation();
-    const updatedFavourites = favouriteCities.filter(fav => fav.name !== cityName);
-    setFavouriteCities(updatedFavourites);
-    localStorage.setItem('favouriteCities', JSON.stringify(updatedFavourites));
+    
+    if (!user) {
+      console.error('Cannot remove favorite: No user logged in');
+      return;
+    }
+    
+    try {
+      console.log('Removing favorite:', cityName);
+      await favoritesService.removeFavorite(cityName);
+      
+      // Update local state immediately for better UX
+      setFavouriteCities(prev => prev.filter(fav => fav.name !== cityName));
+      
+      // Also reload from DB to ensure consistency
+      setTimeout(async () => {
+        try {
+          const response = await favoritesService.getFavorites();
+          setFavouriteCities(response.data || []);
+        } catch (error) {
+          console.error('Error refreshing after removal:', error);
+        }
+      }, 300);
+      
+    } catch (error) {
+      console.error('Error removing favorite:', error);
+      setError(`Failed to remove favorite: ${error.response?.data?.message || error.message}`);
+    }
   };
 
   const handleLogout = () => {
-    // Ici vous pouvez ajouter la logique de déconnexion
-    alert("Déconnexion réussie !");
-    // Exemple: redirection, nettoyage de session, etc.
+    logout();
+    navigate('/login');
   };
 
   const toggleFavouritesView = () => {
@@ -117,19 +213,19 @@ function Weather() {
             className="header-link favourites-link"
             onClick={toggleFavouritesView}
           >
-             Villes favorites
+            Villes favorites
           </button>
           <button 
             className="header-link logout-link"
             onClick={handleLogout}
           >
-             Se déconnecter
+            Se déconnecter
           </button>
         </div>
       </div>
 
       <div className="app">
-        <h1 className="title"> Weather App</h1>
+        <h1 className="title">Weather App</h1>
 
         {!showFavourites ? (
           <>
@@ -159,44 +255,40 @@ function Weather() {
                   </div>
                   <FavouriteIcon 
                     city={{
-                      name: weather.name,
-                      country: weather.sys.country,
-                      lat: weather.coord.lat,
-                      lon: weather.coord.lon
+                      name: weather.city || 'Unknown',
+                      country: weather.country || 'N/A',
+                      lat: weather.lat,
+                      lon: weather.lon
                     }}
                     onFavouriteToggle={handleFavouriteToggle}
                   />
                 </div>
 
                 <div className="weather-icon">
-                  {getWeatherIcon(weather.weather[0].main)}
+                  {getWeatherIcon(weather.description)}
                 </div>
                 
                 <div className="weather-header">
-                  <h2>{weather.name}, {weather.sys.country}</h2>
-                  <h3>{weather.weather[0].description}</h3>
+                  <h2>{weather.city || 'Unknown'}, {weather.country || 'N/A'}</h2>
+                  <h3>{weather.description || 'No description'}</h3>
                 </div>
                 
                 <p className="temperature">
-                  {convertTemp(weather.main.temp)}°{unit === "celsius" ? "C" : "F"}
+                  {convertTemp(weather.temperature || 0)}°{unit === "celsius" ? "C" : "F"}
                 </p>
                 
                 <div className="weather-details">
                   <div className="detail-item">
                     <WiHumidity size={24} />
-                    <span>{weather.main.humidity}%</span>
+                    <span>{weather.humidity || 0}%</span>
                   </div>
                   <div className="detail-item">
                     <WiWind size={24} />
-                    <span>{weather.wind.speed} m/s</span>
+                    <span>{weather.windSpeed || weather.windspeed || 0} m/s</span>
                   </div>
                   <div className="detail-item">
                     <span>🌡️</span>
-                    <span>{convertTemp(weather.main.feels_like)}°</span>
-                  </div>
-                  <div className="detail-item">
-                    <span>💨</span>
-                    <span>{weather.main.pressure} hPa</span>
+                    <span>{convertTemp(weather.feelsLike || weather.temperature || 0)}°</span>
                   </div>
                 </div>
               </div>
@@ -220,9 +312,9 @@ function Weather() {
             ) : (
               <>
                 <div className="favourites-list-page">
-                  {favouriteCities.map(fav => (
+                  {favouriteCities.map((fav, index) => (
                     <div 
-                      key={fav.name} 
+                      key={`${fav.name}-${index}`} 
                       className="favourite-item-page"
                       onClick={() => loadFavouriteCity(fav)}
                     >
@@ -258,7 +350,6 @@ function Weather() {
           </div>
         )}
       </div>
-      
     </div>
   );
 }

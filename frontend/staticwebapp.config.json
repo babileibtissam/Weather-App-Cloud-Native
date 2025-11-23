@@ -1,0 +1,14 @@
+{
+    "navigationFallback": {
+      "rewrite": "/index.html"
+    },
+    "globalHeaders": {
+      "Content-Security-Policy": "default-src 'self' https: 'unsafe-inline' 'unsafe-eval';",
+      "X-Frame-Options": "DENY"
+    },
+    "responseOverrides": {
+      "404": {
+        "rewrite": "/index.html"
+      }
+    }
+  }
