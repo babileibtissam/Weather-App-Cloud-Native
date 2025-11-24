@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://app-meteo-master-gcdxcfh5fafwchfr.westeurope-01.azurewebsites.net';
+const API_BASE_URL = 'https://meteo-backend-fsgzg3fkdjhmaaav.westeurope-01.azurewebsites.net';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
