@@ -20,7 +20,8 @@ export const getSecret = async (secretName) => {
     const fallbackSecrets = {
       'OpenWeatherApiKey': process.env.OPENWEATHER_API_KEY,
       'JwtSecret': process.env.JWT_SECRET,
-      'DatabasePassword': process.env.AZURE_SQL_PASSWORD
+      'DatabasePassword': process.env.AZURE_SQL_PASSWORD,
+      'AzureStorageConnectionString': process.env.AZURE_STORAGE_CONNECTION_STRING
     };
     
     if (fallbackSecrets[secretName]) {
@@ -36,5 +37,8 @@ export const getSecret = async (secretName) => {
 export const secrets = {
   getOpenWeatherApiKey: () => getSecret('OpenWeatherApiKey'),
   getJwtSecret: () => getSecret('JwtSecret'),
-  getDatabasePassword: () => getSecret('DatabasePassword')
+  getDatabasePassword: () => getSecret('DatabasePassword'),
+  
+  // ✅ AJOUTEZ CELLE-CI POUR BLOB STORAGE
+  getAzureStorageConnectionString: () => getSecret('AzureStorageConnectionString')
 };
